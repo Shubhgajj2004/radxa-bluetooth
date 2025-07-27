@@ -5,43 +5,57 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
 
-int main(int argc, char **argv)
-{
-    struct sockaddr_rc loc_addr = { 0 }, rem_addr = { 0 };
-    char buf[1024] = { 0 };
-    int s, client, bytes_read;
+int main() {
+    int server_sock, client_sock;
+    struct sockaddr_rc loc_addr = {0}, rem_addr = {0};
+    char buf[1024] = {0};
     socklen_t opt = sizeof(rem_addr);
 
-    // allocate socket
-    s = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
-
-    // bind socket to port 1 of the first available 
-    // local bluetooth adapter
-    loc_addr.rc_family = AF_BLUETOOTH;
-    loc_addr.rc_bdaddr = *BDADDR_ANY;
-    loc_addr.rc_channel = (uint8_t) 1;
-    bind(s, (struct sockaddr *)&loc_addr, sizeof(loc_addr));
-
-    // put socket into listening mode
-    listen(s, 1);
-    printf("Waiting for connection...\n");
-
-    // accept one connection
-    client = accept(s, (struct sockaddr *)&rem_addr, &opt);
-
-    ba2str( &rem_addr.rc_bdaddr, buf );
-    fprintf(stdout, "Accepted connection from %s\n", buf);
-    memset(buf, 0, sizeof(buf));
-
-    // read data from the client
-    while( (bytes_read = read(client, buf, sizeof(buf))) > 0 ) {
-        printf("Received %d bytes\n", bytes_read);
-        // Here you would process the received audio data
-        // For now, we just print the number of bytes received
+    // Create socket
+    server_sock = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
+    if (server_sock < 0) {
+        perror("Socket creation failed");
+        exit(1);
     }
 
-    // close connection
-    close(client);
-    close(s);
+    // Set local address
+    loc_addr.rc_family = AF_BLUETOOTH;
+    loc_addr.rc_bdaddr = *BDADDR_ANY;
+    loc_addr.rc_channel = 1; // RFCOMM channel 1
+
+    // Bind socket
+    if (bind(server_sock, (struct sockaddr *)&loc_addr, sizeof(loc_addr)) < 0) {
+        perror("Bind failed");
+        close(server_sock);
+        exit(1);
+    }
+
+    // Listen for connections
+    if (listen(server_sock, 1) < 0) {
+        perror("Listen failed");
+        close(server_sock);
+        exit(1);
+    }
+
+    // Set Bluetooth device name to "SpexGlasses"
+    system("hciconfig hci0 name SpexGlasses");
+    printf("Bluetooth host 'SpexGlasses' waiting for connection...\n");
+
+    // Accept connection
+    client_sock = accept(server_sock, (struct sockaddr *)&rem_addr, &opt);
+    if (client_sock < 0) {
+        perror("Accept failed");
+        close(server_sock);
+        exit(1);
+    }
+
+    // Log connection
+    char addr[18];
+    ba2str(&rem_addr.rc_bdaddr, addr);
+    printf("Smartphone connected: %s\n", addr);
+
+    // Close sockets
+    close(client_sock);
+    close(server_sock);
     return 0;
 }
